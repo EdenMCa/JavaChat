@@ -29,6 +29,37 @@ public class Cliente {
                 String linea;
                 while ((linea = entrada.readLine()) != null) {
 
+                    if (linea.startsWith("/archivop:")) {
+                        // Formato: /archivop:USUARIO:NOMBRE_ARCHIVO:BASE64
+                        int c1 = linea.indexOf(":");
+                        int c2 = linea.indexOf(":", c1 + 1);
+                        int c3 = linea.indexOf(":", c2 + 1);
+
+                        if (c1 == -1 || c2 == -1 || c3 == -1) {
+                            continue;
+                        }
+
+                        String remitente = linea.substring(c1 + 1, c2);
+                        String nombreArchivo = linea.substring(c2 + 1, c3);
+                        String base64 = linea.substring(c3 + 1);
+
+                        try {
+                            byte[] bytes = Base64.getDecoder().decode(base64);
+                            File carpeta = new File("recibidos");
+                            carpeta.mkdirs();
+                            Files.write(Paths.get("recibidos/" + nombreArchivo), bytes);
+
+                            System.out.println("\n>>> [PRIVADO] " + remitente
+                                    + " te envió: " + nombreArchivo
+                                    + " (" + bytes.length / 1024 + " KB) → guardado en recibidos/");
+                        } catch (Exception e) {
+                            System.out.println("Error al guardar archivo privado: " + e.getMessage());
+                        }
+
+                        System.out.print("> ");
+                        continue;
+                    }
+
                     if (linea.startsWith("/archivo:")) {
                         // Formato: /archivo:USUARIO:NOMBRE_ARCHIVO:BASE64
                         int c1 = linea.indexOf(":");           // después de "/archivo"
@@ -82,6 +113,42 @@ public class Cliente {
                 continue;
             }
 
+            // Comando /enviarp <usuario> <ruta>  → archivo privado
+            if (msg.startsWith("/enviarp ")) {
+                String resto = msg.substring(9).trim();
+                int espacio = resto.indexOf(" ");
+
+                if (espacio == -1) {
+                    System.out.println("Uso: /enviarp <usuario> <ruta>");
+                    System.out.print("> ");
+                    continue;
+                }
+
+                String destino = resto.substring(0, espacio);
+                String ruta = resto.substring(espacio + 1).trim();
+                File archivo = new File(ruta);
+
+                if (!archivo.exists()) {
+                    System.out.println("Archivo no encontrado: " + ruta);
+                    System.out.print("> ");
+                    continue;
+                }
+
+                if (archivo.length() > 10 * 1024 * 1024) {
+                    System.out.println("Archivo demasiado grande (máx 10 MB).");
+                    System.out.print("> ");
+                    continue;
+                }
+
+                byte[] bytes = Files.readAllBytes(archivo.toPath());
+                String base64 = Base64.getEncoder().encodeToString(bytes);
+
+                // Formato: /archivop:destinatario:nombre_archivo:BASE64
+                salida.println("/archivop:" + destino + ":" + archivo.getName() + ":" + base64);
+                System.out.print("> ");
+                continue;
+            }
+
             // Comando /enviar (se maneja antes del switch general)
             if (msg.startsWith("/enviar ")) {
                 String ruta = msg.substring(8).trim();
@@ -109,7 +176,7 @@ public class Cliente {
                 continue;
             }
             if (msg.startsWith("/msg ")) {
-                salida.println(msg);  // el servidor se encarga de parsearlo
+                salida.println(msg);
                 System.out.print("> ");
                 continue;
             }
@@ -132,6 +199,7 @@ public class Cliente {
                         System.out.println("Comandos disponibles:");
                         System.out.println("  /msg <usuario> <texto>  → enviar mensaje privado");
                         System.out.println("  /enviar <ruta>          → enviar un archivo");
+                        System.out.println("  /enviarp <usuario> <ruta> → enviar archivo privado");
                         System.out.println("  /exit                   → salir del chat");
                         System.out.println("  /usuarios               → ver quién está conectado");
                         System.out.println("  /ayuda                  → mostrar esta ayuda");

@@ -38,7 +38,7 @@ public class Servidor {
         }
     }
 
-    // Enviar a todos MENOS al remitente
+    // Enviar a el archivo a todos los integrantes, pero no permite que se guarde el archivo en el lugar de origen
     public static synchronized void broadcastExcepto(String mensaje, PrintWriter excepto) {
         for (PrintWriter pw : clientes.keySet()) {
             if (pw != excepto) {
@@ -127,6 +127,35 @@ public class Servidor {
                         salida.println(lista.toString());
                         continue;
                     }
+                    if (mensaje.startsWith("/archivop:")) {
+                        // Formato recibido: /archivop:destinatario:nombre_archivo:BASE64
+                        int c1 = mensaje.indexOf(":");
+                        int c2 = mensaje.indexOf(":", c1 + 1);
+                        int c3 = mensaje.indexOf(":", c2 + 1);
+
+                        if (c1 == -1 || c2 == -1 || c3 == -1) {
+                            continue;
+                        }
+
+                        String destino = mensaje.substring(c1 + 1, c2);
+                        String nombreArchivo = mensaje.substring(c2 + 1, c3);
+                        String base64 = mensaje.substring(c3 + 1);
+
+                        PrintWriter pwDestino = buscarCliente(destino);
+
+                        if (pwDestino == null) {
+                            salida.println("Usuario '" + destino + "' no está conectado.");
+                        } else if (pwDestino == salida) {
+                            salida.println("No puedes enviarte archivos a ti mismo.");
+                        } else {
+                            // Reenviar SOLO al destinatario, con el nombre del remitente
+                            pwDestino.println("/archivop:" + nombre + ":" + nombreArchivo + ":" + base64);
+                            // Confirmación al emisor
+                            salida.println("✓ Archivo privado entregado a " + destino + ": " + nombreArchivo);
+                            System.out.println("Archivo privado: " + nombre + " → " + destino + " (" + nombreArchivo + ")");
+                        }
+                        continue;
+                    }
                     if (mensaje.startsWith("/archivo:")) {
                         // Formato recibido: /archivo:nombre_archivo:BASE64
                         // Primer split en 3 partes exactas
@@ -134,12 +163,11 @@ public class Servidor {
                         int segundoColon = mensaje.indexOf(":", primerColon + 1);
 
                         if (segundoColon == -1) {
-                            continue; // Mensaje mal formado
+                            continue;
                         }
                         String nombreArchivo = mensaje.substring(primerColon + 1, segundoColon);
                         String base64 = mensaje.substring(segundoColon + 1);
 
-                        // Reenviar a todos MENOS al remitente
                         // Formato enviado: /archivo:NOMBRE_USUARIO:NOMBRE_ARCHIVO:BASE64
                         broadcastExcepto(
                                 "/archivo:" + nombre + ":" + nombreArchivo + ":" + base64,
